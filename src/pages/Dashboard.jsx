@@ -1,17 +1,17 @@
 import SidebarLeft from '../components/sidebar/SidebarLeft';
+import CenterPanel from '../components/chart/CenterPanel';
 
-function PlaceholderCol({ label, sub, style }) {
+function PlaceholderCol({ label, sub }) {
   return (
     <div
       style={{
         background: 'var(--surface)',
-        border: '1px solid var(--border)',
+        borderLeft: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        ...style,
       }}
     >
       <span
@@ -51,8 +51,8 @@ export default function Dashboard() {
       }}
     >
       <SidebarLeft />
-      <PlaceholderCol label="Chart"    sub="coming in Phase 3" style={{ borderLeft: 'none', borderRight: 'none' }} />
-      <PlaceholderCol label="Analysis" sub="coming in Phase 3" style={{ borderLeft: 'none' }} />
+      <CenterPanel />
+      <PlaceholderCol label="Analysis" sub="coming in Phase 4" />
     </div>
   );
 }
