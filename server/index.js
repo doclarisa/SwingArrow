@@ -1,0 +1,124 @@
+const express = require('express');
+const cors = require('cors');
+const { default: YahooFinance } = require('yahoo-finance2');
+
+const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+app.use(cors({ origin: 'http://localhost:5173' }));
+app.use(express.json());
+
+// GET /api/quote/:ticker — current price, % change, volume
+app.get('/api/quote/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const quote = await yf.quote(ticker);
+    res.json({
+      ticker: quote.symbol,
+      price: quote.regularMarketPrice,
+      change: quote.regularMarketChange,
+      changePercent: quote.regularMarketChangePercent,
+      volume: quote.regularMarketVolume,
+      avgVolume: quote.averageDailyVolume3Month,
+      marketCap: quote.marketCap,
+      high: quote.regularMarketDayHigh,
+      low: quote.regularMarketDayLow,
+      open: quote.regularMarketOpen,
+      previousClose: quote.regularMarketPreviousClose,
+      fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
+      shortName: quote.shortName,
+    });
+  } catch (err) {
+    console.error(`[quote] ${req.params.ticker}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/history/:ticker — 6 months of daily OHLCV candles
+app.get('/api/history/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 6);
+
+    const result = await yf.chart(ticker, {
+      period1: startDate,
+      period2: endDate,
+      interval: '1d',
+    });
+
+    const candles = (result.quotes || []).map((q) => ({
+      time: Math.floor(new Date(q.date).getTime() / 1000),
+      open: q.open,
+      high: q.high,
+      low: q.low,
+      close: q.close,
+      volume: q.volume,
+    }));
+
+    res.json(candles);
+  } catch (err) {
+    console.error(`[history] ${req.params.ticker}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fundamentals/:ticker — EPS, revenue growth, profit margins
+app.get('/api/fundamentals/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const summary = await yf.quoteSummary(ticker, {
+      modules: ['financialData', 'defaultKeyStatistics'],
+    });
+
+    const fd = summary.financialData || {};
+    const ks = summary.defaultKeyStatistics || {};
+
+    res.json({
+      eps: ks.trailingEps,
+      forwardEps: ks.forwardEps,
+      peRatio: ks.trailingPE,
+      forwardPE: ks.forwardPE,
+      revenueGrowth: fd.revenueGrowth,
+      earningsGrowth: fd.earningsGrowth,
+      grossMargins: fd.grossMargins,
+      operatingMargins: fd.operatingMargins,
+      profitMargins: fd.profitMargins,
+      returnOnEquity: fd.returnOnEquity,
+      returnOnAssets: fd.returnOnAssets,
+      totalCash: fd.totalCash,
+      totalDebt: fd.totalDebt,
+      freeCashflow: fd.freeCashflow,
+      revenuePerShare: fd.revenuePerShare,
+    });
+  } catch (err) {
+    console.error(`[fundamentals] ${req.params.ticker}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/news/:ticker — latest 5 news headlines
+app.get('/api/news/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const result = await yf.search(ticker, { newsCount: 5, quotesCount: 0 });
+    const articles = (result.news || []).slice(0, 5).map((n) => ({
+      title: n.title,
+      publisher: n.publisher,
+      link: n.link,
+      publishedAt: n.providerPublishTime,
+      thumbnail: n.thumbnail?.resolutions?.[0]?.url || null,
+    }));
+    res.json(articles);
+  } catch (err) {
+    console.error(`[news] ${req.params.ticker}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`SwingArrow API server running on http://localhost:${PORT}`);
+});
