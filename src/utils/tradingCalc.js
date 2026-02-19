@@ -29,6 +29,26 @@ export function calculatePositionSize(accountSize, riskPct, entry, stop) {
 }
 
 /**
+ * Calculate a Simple Moving Average over an array of OHLCV candles.
+ * @param {Array<{time: number, close: number}>} data   - Candle array (ascending time)
+ * @param {number} period                               - SMA period (e.g. 50, 200)
+ * @returns {Array<{time: number, value: number}>}
+ */
+export function calculateSMA(data, period) {
+  if (!data || data.length < period) return [];
+  const result = [];
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i].close;
+    if (i >= period) sum -= data[i - period].close;
+    if (i >= period - 1) {
+      result.push({ time: data[i].time, value: parseFloat((sum / period).toFixed(4)) });
+    }
+  }
+  return result;
+}
+
+/**
  * Calculate risk/reward ratio and reward dollar amount.
  * @param {number} entry  - Entry price
  * @param {number} stop   - Stop-loss price

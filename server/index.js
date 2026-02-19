@@ -36,28 +36,39 @@ app.get('/api/quote/:ticker', async (req, res) => {
   }
 });
 
-// GET /api/history/:ticker — 6 months of daily OHLCV candles
+// GET /api/history/:ticker — OHLCV candles, accepts ?interval=&range=
 app.get('/api/history/:ticker', async (req, res) => {
   try {
     const { ticker } = req.params;
+    const { interval = '1d', range = '3mo' } = req.query;
+
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 6);
+    switch (range) {
+      case '1d':  startDate.setDate(startDate.getDate() - 1);           break;
+      case '5d':  startDate.setDate(startDate.getDate() - 5);           break;
+      case '1mo': startDate.setMonth(startDate.getMonth() - 1);         break;
+      case '3mo': startDate.setMonth(startDate.getMonth() - 3);         break;
+      case '1y':  startDate.setFullYear(startDate.getFullYear() - 1);   break;
+      default:    startDate.setMonth(startDate.getMonth() - 3);
+    }
 
     const result = await yf.chart(ticker, {
       period1: startDate,
       period2: endDate,
-      interval: '1d',
+      interval,
     });
 
-    const candles = (result.quotes || []).map((q) => ({
-      time: Math.floor(new Date(q.date).getTime() / 1000),
-      open: q.open,
-      high: q.high,
-      low: q.low,
-      close: q.close,
-      volume: q.volume,
-    }));
+    const candles = (result.quotes || [])
+      .filter((q) => q.open != null && q.close != null)
+      .map((q) => ({
+        time: Math.floor(new Date(q.date).getTime() / 1000),
+        open: q.open,
+        high: q.high,
+        low: q.low,
+        close: q.close,
+        volume: q.volume || 0,
+      }));
 
     res.json(candles);
   } catch (err) {
