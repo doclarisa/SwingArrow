@@ -1,8 +1,4 @@
-const COLUMNS = [
-  { label: 'Watchlist', sub: 'coming in Phase 2', width: 220 },
-  { label: 'Chart',     sub: 'coming in Phase 2', width: null  },
-  { label: 'Analysis',  sub: 'coming in Phase 2', width: 280 },
-];
+import SidebarLeft from '../components/sidebar/SidebarLeft';
 
 function PlaceholderCol({ label, sub, style }) {
   return (
@@ -54,9 +50,9 @@ export default function Dashboard() {
         minHeight: 0,
       }}
     >
-      <PlaceholderCol label="Watchlist" sub="coming in Phase 2" style={{ borderRight: 'none' }} />
-      <PlaceholderCol label="Chart"     sub="coming in Phase 2" style={{ borderLeft: 'none', borderRight: 'none' }} />
-      <PlaceholderCol label="Analysis"  sub="coming in Phase 2" style={{ borderLeft: 'none' }} />
+      <SidebarLeft />
+      <PlaceholderCol label="Chart"    sub="coming in Phase 3" style={{ borderLeft: 'none', borderRight: 'none' }} />
+      <PlaceholderCol label="Analysis" sub="coming in Phase 3" style={{ borderLeft: 'none' }} />
     </div>
   );
 }
