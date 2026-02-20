@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import useTickerStore from '../../store/useTickerStore';
 import { formatPrice } from '../../utils/formatters';
+import { API_BASE } from '../../lib/api';
 
 const TIMEFRAMES = ['1D', 'W', 'M', '3M', '1Y'];
 
@@ -15,7 +16,7 @@ export default function ChartHeader({ timeframe, onTimeframeChange }) {
 
   const { data: quote } = useQuery({
     queryKey: ['quote', activeTicker],
-    queryFn: () => fetch(`/api/quote/${activeTicker}`).then((r) => r.json()),
+    queryFn: () => fetch(`${API_BASE}/api/quote/${activeTicker}`).then((r) => r.json()),
     staleTime: 30_000,
   });
 

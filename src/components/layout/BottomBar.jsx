@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API_BASE } from '../../lib/api'
 
 // Shown immediately while the API loads (avoids blank bar on first paint)
 const FALLBACK = [
@@ -25,7 +26,7 @@ export default function BottomBar() {
   useEffect(() => {
     async function load() {
       try {
-        const r = await fetch('/api/indices')
+        const r = await fetch(`${API_BASE}/api/indices`)
         if (r.ok) setIndices(await r.json())
       } catch { /* keep previous data on error */ }
     }

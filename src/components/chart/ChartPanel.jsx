@@ -8,6 +8,7 @@ import {
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import useTickerStore from '../../store/useTickerStore';
 import { calculateSMA } from '../../utils/tradingCalc';
+import { API_BASE } from '../../lib/api';
 
 // Map UI timeframe labels to Yahoo Finance params
 const TIMEFRAME_CONFIG = {
@@ -19,7 +20,7 @@ const TIMEFRAME_CONFIG = {
 };
 
 async function fetchHistory(ticker, interval, range) {
-  const res = await fetch(`/api/history/${ticker}?interval=${interval}&range=${range}`);
+  const res = await fetch(`${API_BASE}/api/history/${ticker}?interval=${interval}&range=${range}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);

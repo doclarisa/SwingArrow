@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import useTickerStore from '../store/useTickerStore';
 import { formatPrice } from '../utils/formatters';
+import { API_BASE } from '../lib/api';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ export default function Scanner() {
   const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['scanner'],
     queryFn: async () => {
-      const r = await fetch('/api/scanner');
+      const r = await fetch(`${API_BASE}/api/scanner`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     },

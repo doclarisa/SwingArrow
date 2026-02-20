@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 import useTickerStore from '../../store/useTickerStore';
 import WatchlistItem from './WatchlistItem';
+import { API_BASE } from '../../lib/api';
 
 function SkeletonRow() {
   return (
@@ -23,7 +24,7 @@ function SkeletonRow() {
 }
 
 async function fetchQuote(ticker) {
-  const res = await fetch(`/api/quote/${ticker}`);
+  const res = await fetch(`${API_BASE}/api/quote/${ticker}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);

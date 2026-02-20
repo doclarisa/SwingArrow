@@ -1,18 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import useTickerStore from '../../store/useTickerStore';
+import { API_BASE } from '../../lib/api';
 
 async function fetchFundamentals(ticker) {
-  const r = await fetch(`/api/fundamentals/${ticker}`);
+  const r = await fetch(`${API_BASE}/api/fundamentals/${ticker}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 async function fetchRS(ticker) {
-  const r = await fetch(`/api/rs/${ticker}`);
+  const r = await fetch(`${API_BASE}/api/rs/${ticker}`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 function fetchQuote(ticker) {
-  return fetch(`/api/quote/${ticker}`).then((r) => r.json());
+  return fetch(`${API_BASE}/api/quote/${ticker}`).then((r) => r.json());
 }
 
 function pct(n) {
