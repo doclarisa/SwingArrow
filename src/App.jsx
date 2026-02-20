@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Header from './components/layout/Header'
 import BottomBar from './components/layout/BottomBar'
 import Dashboard from './pages/Dashboard'
+import Scanner from './pages/Scanner'
 
 function Placeholder({ title }) {
   return (
@@ -37,7 +38,7 @@ export default function App() {
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/screener" element={<Placeholder title="Screener" />} />
+          <Route path="/screener" element={<Scanner />} />
           <Route path="/calc" element={<Placeholder title="Position Calculator" />} />
           <Route path="/news" element={<Placeholder title="News Feed" />} />
         </Routes>

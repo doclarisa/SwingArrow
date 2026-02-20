@@ -166,6 +166,111 @@ app.get('/api/rs/:ticker', async (req, res) => {
   }
 });
 
+// GET /api/scanner — live data for 20 swing trading candidates
+const SCANNER_TICKERS = [
+  'NVDA','META','AAPL','MSFT','SMCI','TSLA','AMD','CRWD','PANW','MELI',
+  'AMZN','GOOGL','NFLX','AVGO','ARM','PLTR','SNOW','DDOG','MDB','COIN',
+];
+
+app.get('/api/scanner', async (req, res) => {
+  try {
+    const endDate   = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 1);
+
+    // Fetch SPY weekly data once — reused for all RS calculations
+    const spyChart   = await yf.chart('SPY', { period1: startDate, period2: endDate, interval: '1wk' });
+    const spyQuotes  = (spyChart.quotes || []).filter((q) => q.close != null);
+    const spyReturn  = spyQuotes.length >= 2
+      ? (spyQuotes[spyQuotes.length - 1].close - spyQuotes[0].close) / spyQuotes[0].close
+      : null;
+
+    // For each ticker: quote + quoteSummary + weekly chart in parallel
+    const settled = await Promise.allSettled(
+      SCANNER_TICKERS.map(async (ticker) => {
+        const [quote, summary, chart] = await Promise.all([
+          yf.quote(ticker),
+          yf.quoteSummary(ticker, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }),
+          yf.chart(ticker, { period1: startDate, period2: endDate, interval: '1wk' }),
+        ]);
+
+        const fd = summary.financialData        || {};
+        const ks = summary.defaultKeyStatistics || {};
+        const sd = summary.summaryDetail        || {};
+
+        // RS Rating
+        const tQuotes = (chart.quotes || []).filter((q) => q.close != null);
+        let rsRating = null;
+        if (tQuotes.length >= 2 && spyReturn != null && spyReturn !== 0) {
+          const tr = (tQuotes[tQuotes.length - 1].close - tQuotes[0].close) / tQuotes[0].close;
+          rsRating = Math.max(1, Math.min(99, Math.round((tr / spyReturn) * 50 + 50)));
+        }
+
+        const price      = quote.regularMarketPrice;
+        const high52     = sd.fiftyTwoWeekHigh;
+        const low52      = sd.fiftyTwoWeekLow;
+        const avgVolume  = sd.averageVolume;
+        const volume     = sd.regularMarketVolume ?? quote.regularMarketVolume;
+        const epsGrowth  = fd.earningsGrowth;
+        const revGrowth  = fd.revenueGrowth;
+        const opMargin   = fd.operatingMargins;
+        const fwdPE      = ks.forwardPE;
+
+        // Setup score — 8 SEPA criteria
+        let setupScore = 0;
+        if (rsRating != null && rsRating >= 70)                                      setupScore++;
+        if (epsGrowth != null && epsGrowth * 100 >= 25)                              setupScore++;
+        if (revGrowth != null && revGrowth * 100 >= 20)                              setupScore++;
+        if (opMargin  != null && opMargin > 0)                                       setupScore++;
+        if (price != null && high52 != null && price >= high52 * 0.75)               setupScore++;
+        if (price != null && high52 != null && low52 != null
+            && price > (high52 + low52) / 2)                                         setupScore++;
+        if (volume != null && avgVolume != null && volume >= avgVolume)               setupScore++;
+        if (fwdPE  != null && fwdPE < 50)                                            setupScore++;
+
+        return {
+          ticker,
+          company:         quote.shortName || ticker,
+          price,
+          change:          quote.regularMarketChange,
+          changePercent:   quote.regularMarketChangePercent,
+          volume,
+          avgVolume,
+          volumeRatio:     volume != null && avgVolume != null ? volume / avgVolume : null,
+          epsGrowth,
+          revenueGrowth:   revGrowth,
+          operatingMargin: opMargin,
+          fiftyTwoWeekHigh: high52,
+          fiftyTwoWeekLow:  low52,
+          weekHighPercent: price != null && high52 != null ? price / high52 : null,
+          rsRating,
+          setupScore,
+          stage: 2,
+        };
+      })
+    );
+
+    // Fulfilled rows keep full data; rejected rows return nulls (never crash the whole scan)
+    const rows = settled.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value;
+      console.error(`[scanner] ${SCANNER_TICKERS[i]}:`, r.reason?.message);
+      return {
+        ticker: SCANNER_TICKERS[i], company: null,
+        price: null, change: null, changePercent: null,
+        volume: null, avgVolume: null, volumeRatio: null,
+        epsGrowth: null, revenueGrowth: null, operatingMargin: null,
+        fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null, weekHighPercent: null,
+        rsRating: null, setupScore: 0, stage: 2,
+      };
+    });
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[scanner]:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/news/:ticker — latest 5 news headlines
 app.get('/api/news/:ticker', async (req, res) => {
   try {
