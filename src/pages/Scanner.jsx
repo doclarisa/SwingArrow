@@ -124,10 +124,10 @@ export default function Scanner() {
   const setActiveTicker = useTickerStore((s) => s.setActiveTicker);
 
   // Filters
-  const [minRS,       setMinRS]    = useState(60);
-  const [minEPS,      setMinEPS]   = useState(20);
-  const [minScore,    setMinScore] = useState(3);
-  const [stageFilter, setStage]    = useState('2');
+  const [minRS,       setMinRS]    = useState(1);
+  const [minEPS,      setMinEPS]   = useState(0);
+  const [minScore,    setMinScore] = useState(1);
+  const [stageFilter, setStage]    = useState('All');
   const [volSurge,    setVolSurge] = useState(false);
 
   // Sort
@@ -175,10 +175,10 @@ export default function Scanner() {
   };
 
   const resetFilters = () => {
-    setMinRS(70);
-    setMinEPS(20);
-    setMinScore(5);
-    setStage('2');
+    setMinRS(1);
+    setMinEPS(0);
+    setMinScore(1);
+    setStage('All');
     setVolSurge(false);
   };
 
