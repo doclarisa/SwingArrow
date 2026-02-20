@@ -77,36 +77,91 @@ app.get('/api/history/:ticker', async (req, res) => {
   }
 });
 
-// GET /api/fundamentals/:ticker — EPS, revenue growth, profit margins
+// GET /api/fundamentals/:ticker — EPS, revenue growth, profit margins, 52wk range, volume
 app.get('/api/fundamentals/:ticker', async (req, res) => {
   try {
     const { ticker } = req.params;
     const summary = await yf.quoteSummary(ticker, {
-      modules: ['financialData', 'defaultKeyStatistics'],
+      modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'],
     });
 
     const fd = summary.financialData || {};
     const ks = summary.defaultKeyStatistics || {};
+    const sd = summary.summaryDetail || {};
 
     res.json({
-      eps: ks.trailingEps,
+      // Price & range
+      currentPrice: fd.currentPrice,
+      fiftyTwoWeekHigh: sd.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow:  sd.fiftyTwoWeekLow,
+      // Volume
+      averageVolume:       sd.averageVolume,
+      volume:              sd.regularMarketVolume,
+      // EPS & valuation
+      eps:        ks.trailingEps,
       forwardEps: ks.forwardEps,
-      peRatio: ks.trailingPE,
-      forwardPE: ks.forwardPE,
-      revenueGrowth: fd.revenueGrowth,
-      earningsGrowth: fd.earningsGrowth,
-      grossMargins: fd.grossMargins,
+      peRatio:    ks.trailingPE,
+      forwardPE:  ks.forwardPE,
+      // Growth & margins
+      revenueGrowth:    fd.revenueGrowth,
+      earningsGrowth:   fd.earningsGrowth,
+      grossMargins:     fd.grossMargins,
       operatingMargins: fd.operatingMargins,
-      profitMargins: fd.profitMargins,
-      returnOnEquity: fd.returnOnEquity,
-      returnOnAssets: fd.returnOnAssets,
-      totalCash: fd.totalCash,
-      totalDebt: fd.totalDebt,
-      freeCashflow: fd.freeCashflow,
+      profitMargins:    fd.profitMargins,
+      returnOnEquity:   fd.returnOnEquity,
+      returnOnAssets:   fd.returnOnAssets,
+      // Balance sheet
+      totalCash:      fd.totalCash,
+      totalDebt:      fd.totalDebt,
+      freeCashflow:   fd.freeCashflow,
       revenuePerShare: fd.revenuePerShare,
     });
   } catch (err) {
     console.error(`[fundamentals] ${req.params.ticker}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/rs/:ticker — Relative Strength Rating vs SPY (1–99 scale)
+app.get('/api/rs/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const endDate   = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 1);
+
+    const [tickerResult, spyResult] = await Promise.all([
+      yf.chart(ticker, { period1: startDate, period2: endDate, interval: '1wk' }),
+      yf.chart('SPY',  { period1: startDate, period2: endDate, interval: '1wk' }),
+    ]);
+
+    function lastClose(result) {
+      const quotes = (result.quotes || []).filter((q) => q.close != null);
+      if (quotes.length < 2) return null;
+      return { first: quotes[0].close, last: quotes[quotes.length - 1].close };
+    }
+
+    const tData = lastClose(tickerResult);
+    const sData = lastClose(spyResult);
+
+    if (!tData || !sData) {
+      return res.json({ rs: null });
+    }
+
+    const tickerReturn = (tData.last - tData.first) / tData.first;
+    const spyReturn    = (sData.last - sData.first) / sData.first;
+
+    let rs;
+    if (spyReturn === 0) {
+      rs = tickerReturn >= 0 ? 99 : 1;
+    } else {
+      rs = Math.round((tickerReturn / spyReturn) * 50 + 50);
+    }
+    rs = Math.max(1, Math.min(99, rs));
+
+    res.json({ rs, tickerReturn, spyReturn });
+  } catch (err) {
+    console.error(`[rs] ${req.params.ticker}:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });

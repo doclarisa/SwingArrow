@@ -1,41 +1,6 @@
 import SidebarLeft from '../components/sidebar/SidebarLeft';
 import CenterPanel from '../components/chart/CenterPanel';
-
-function PlaceholderCol({ label, sub }) {
-  return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        borderLeft: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-      }}
-    >
-      <span
-        style={{
-          color: 'var(--gold)',
-          fontFamily: "'DM Serif Display', serif",
-          fontSize: 22,
-          letterSpacing: '0.02em',
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          color: 'var(--muted)',
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 14,
-        }}
-      >
-        {sub}
-      </span>
-    </div>
-  );
-}
+import SidebarRight from '../components/sidebar/SidebarRight';
 
 export default function Dashboard() {
   return (
@@ -52,7 +17,7 @@ export default function Dashboard() {
     >
       <SidebarLeft />
       <CenterPanel />
-      <PlaceholderCol label="Analysis" sub="coming in Phase 4" />
+      <SidebarRight />
     </div>
   );
 }
