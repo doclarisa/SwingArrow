@@ -63,6 +63,7 @@ function MarketStatusPill() {
 const navLinks = [
   { to: '/', label: 'Dashboard' },
   { to: '/screener', label: 'Screener' },
+  { to: '/journal', label: 'Journal' },
   { to: '/calc', label: 'Calc' },
   { to: '/news', label: 'News' },
 ];

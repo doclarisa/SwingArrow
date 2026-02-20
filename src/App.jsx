@@ -3,6 +3,7 @@ import Header from './components/layout/Header'
 import BottomBar from './components/layout/BottomBar'
 import Dashboard from './pages/Dashboard'
 import Scanner from './pages/Scanner'
+import Journal from './pages/Journal'
 
 function Placeholder({ title }) {
   return (
@@ -39,6 +40,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/screener" element={<Scanner />} />
+          <Route path="/journal" element={<Journal />} />
           <Route path="/calc" element={<Placeholder title="Position Calculator" />} />
           <Route path="/news" element={<Placeholder title="News Feed" />} />
         </Routes>
