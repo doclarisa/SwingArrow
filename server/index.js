@@ -216,17 +216,30 @@ app.get('/api/scanner', async (req, res) => {
         const opMargin   = fd.operatingMargins;
         const fwdPE      = ks.forwardPE;
 
-        // Setup score — 8 SEPA criteria
-        let setupScore = 0;
-        if (rsRating != null && rsRating >= 70)                                      setupScore++;
-        if (epsGrowth != null && epsGrowth * 100 >= 25)                              setupScore++;
-        if (revGrowth != null && revGrowth * 100 >= 20)                              setupScore++;
-        if (opMargin  != null && opMargin > 0)                                       setupScore++;
-        if (price != null && high52 != null && price >= high52 * 0.75)               setupScore++;
-        if (price != null && high52 != null && low52 != null
-            && price > (high52 + low52) / 2)                                         setupScore++;
-        if (volume != null && avgVolume != null && volume >= avgVolume)               setupScore++;
-        if (fwdPE  != null && fwdPE < 50)                                            setupScore++;
+        // Proportional setup score — only count criteria where data is available
+        // Each criterion: if data is missing → skip (don't penalise)
+        let setupPassed = 0;
+        let setupMax    = 0;
+
+        function criterion(dataAvailable, passes) {
+          if (!dataAvailable) return; // field is null/undefined — skip entirely
+          setupMax++;
+          if (passes) setupPassed++;
+        }
+
+        criterion(rsRating != null,                                    rsRating >= 70);
+        criterion(epsGrowth != null,                                   epsGrowth * 100 >= 25);
+        criterion(revGrowth != null,                                   revGrowth * 100 >= 20);
+        criterion(opMargin  != null,                                   opMargin > 0);
+        criterion(price != null && high52 != null,                     price >= high52 * 0.75);
+        criterion(price != null && high52 != null && low52 != null,    price > (high52 + low52) / 2);
+        criterion(volume != null && avgVolume != null,                 volume >= avgVolume);
+        criterion(fwdPE  != null,                                      fwdPE < 50);
+
+        // Ratio for sorting (0–1); raw passed count used for filter thresholds
+        const setupScore = setupMax > 0 ? setupPassed / setupMax : 0;
+
+        console.log(`[SCANNER] ${ticker}: eps=${epsGrowth}, rev=${revGrowth}, rs=${rsRating}, margin=${opMargin}, passed=${setupPassed}/${setupMax}`);
 
         return {
           ticker,
@@ -244,7 +257,9 @@ app.get('/api/scanner', async (req, res) => {
           fiftyTwoWeekLow:  low52,
           weekHighPercent: price != null && high52 != null ? price / high52 : null,
           rsRating,
-          setupScore,
+          setupScore,   // float 0–1, for sorting
+          setupPassed,  // int, for filter threshold and display
+          setupMax,     // int, for display denominator
           stage: 2,
         };
       })
@@ -260,7 +275,7 @@ app.get('/api/scanner', async (req, res) => {
         volume: null, avgVolume: null, volumeRatio: null,
         epsGrowth: null, revenueGrowth: null, operatingMargin: null,
         fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null, weekHighPercent: null,
-        rsRating: null, setupScore: 0, stage: 2,
+        rsRating: null, setupScore: 0, setupPassed: 0, setupMax: 0, stage: 2,
       };
     });
 

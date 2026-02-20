@@ -25,10 +25,11 @@ function fmtChg(n) {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
-function grade(s) {
-  if (s >= 7) return { l: 'A', c: '#2ecc71' };
-  if (s >= 5) return { l: 'B', c: '#c9a84c' };
-  if (s >= 3) return { l: 'C', c: '#e67e22' };
+// Grade by ratio (setupScore is 0–1)
+function grade(ratio) {
+  if (ratio >= 0.875) return { l: 'A', c: '#2ecc71' };
+  if (ratio >= 0.625) return { l: 'B', c: '#c9a84c' };
+  if (ratio >= 0.375) return { l: 'C', c: '#e67e22' };
   return { l: 'D', c: '#e74c3c' };
 }
 
@@ -43,9 +44,10 @@ function rsColor(r) {
   return 'var(--text)';
 }
 
-function rowBorder(score) {
-  if (score >= 7) return 'var(--gold)';
-  if (score >= 5) return '#2ecc71';
+// Border keyed off passed count (setupPassed) rather than ratio
+function rowBorder(passed) {
+  if (passed >= 7) return 'var(--gold)';
+  if (passed >= 5) return '#2ecc71';
   return 'transparent';
 }
 
@@ -122,9 +124,9 @@ export default function Scanner() {
   const setActiveTicker = useTickerStore((s) => s.setActiveTicker);
 
   // Filters
-  const [minRS,       setMinRS]    = useState(70);
+  const [minRS,       setMinRS]    = useState(60);
   const [minEPS,      setMinEPS]   = useState(20);
-  const [minScore,    setMinScore] = useState(5);
+  const [minScore,    setMinScore] = useState(3);
   const [stageFilter, setStage]    = useState('2');
   const [volSurge,    setVolSurge] = useState(false);
 
@@ -185,9 +187,12 @@ export default function Scanner() {
     if (!data) return [];
     return [...data]
       .filter((row) => {
-        if ((row.rsRating    ?? -1)        < minRS)    return false;
-        if ((row.epsGrowth   ?? -Infinity) * 100 < minEPS) return false;
-        if (row.setupScore                 < minScore) return false;
+        // RS: null counts as fail (no data = no RS signal)
+        if ((row.rsRating ?? -1) < minRS) return false;
+        // EPS: if data is missing (null/undefined), pass through — show N/A in cell
+        if (row.epsGrowth != null && row.epsGrowth * 100 < minEPS) return false;
+        // Score threshold: use raw passed count, not ratio
+        if ((row.setupPassed ?? 0) < minScore) return false;
         if (stageFilter !== 'All' && row.stage !== Number(stageFilter)) return false;
         if (volSurge && (row.volumeRatio ?? 0) < 1.25) return false;
         return true;
@@ -208,7 +213,7 @@ export default function Scanner() {
   // Summary counts (over unfiltered data)
   const totalCount  = data?.length ?? 20;
   const stage2Count = data?.filter((r) => r.stage === 2).length ?? 0;
-  const score7Count = data?.filter((r) => r.setupScore >= 7).length ?? 0;
+  const score7Count = data?.filter((r) => (r.setupPassed ?? 0) >= 7).length ?? 0;
   const lastUpdated = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '—';
@@ -451,7 +456,7 @@ export default function Scanner() {
               </tr>
             ) : (
               filtered.map((row, i) => {
-                const { l: gradeLetter, c: gradeColor } = grade(row.setupScore);
+                const { l: gradeLetter, c: gradeColor } = grade(row.setupScore); // ratio 0–1
                 const isPos = (row.changePercent ?? 0) >= 0;
                 const bgBase = i % 2 === 0 ? 'var(--bg)' : 'var(--surface)';
 
@@ -460,7 +465,7 @@ export default function Scanner() {
                     key={row.ticker}
                     style={{
                       borderBottom: '1px solid var(--border)',
-                      borderLeft: `3px solid ${rowBorder(row.setupScore)}`,
+                      borderLeft: `3px solid ${rowBorder(row.setupPassed ?? 0)}`,
                       background: bgBase,
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
@@ -545,9 +550,11 @@ export default function Scanner() {
                       {row.volumeRatio != null ? `${row.volumeRatio.toFixed(2)}×` : '—'}
                     </td>
 
-                    {/* Score */}
+                    {/* Score — shows passed/available e.g. "5/7 B" */}
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>{row.setupScore}/8 </span>
+                      <span style={{ color: 'var(--muted)', fontSize: 11 }}>
+                        {row.setupPassed ?? 0}/{row.setupMax ?? 8}{' '}
+                      </span>
                       <span style={{ fontWeight: 700, color: gradeColor }}>{gradeLetter}</span>
                     </td>
 
