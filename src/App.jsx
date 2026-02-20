@@ -4,6 +4,7 @@ import BottomBar from './components/layout/BottomBar'
 import Dashboard from './pages/Dashboard'
 import Scanner from './pages/Scanner'
 import Journal from './pages/Journal'
+import Calc from './pages/Calc'
 
 function Placeholder({ title }) {
   return (
@@ -41,7 +42,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/screener" element={<Scanner />} />
           <Route path="/journal" element={<Journal />} />
-          <Route path="/calc" element={<Placeholder title="Position Calculator" />} />
+          <Route path="/calc" element={<Calc />} />
           <Route path="/news" element={<Placeholder title="News Feed" />} />
         </Routes>
       </div>

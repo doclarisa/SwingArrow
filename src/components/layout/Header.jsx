@@ -134,7 +134,8 @@ export default function Header() {
               fontWeight: 500,
               color: isActive ? 'var(--gold)' : '#c9b99a',
               background: isActive ? 'var(--surface2)' : 'transparent',
-              transition: 'color 0.15s, background 0.15s',
+              borderBottom: isActive ? '2px solid var(--gold)' : '2px solid transparent',
+              transition: 'color 0.15s, background 0.15s, border-color 0.15s',
             })}
           >
             {label}

@@ -286,6 +286,93 @@ app.get('/api/scanner', async (req, res) => {
   }
 });
 
+// GET /api/indices — live quotes for SPY, QQQ, IWM, DIA, VIX, GLD, BTC (bottom bar)
+const INDEX_MAP = [
+  { symbol: 'SPY', yfTicker: 'SPY'     },
+  { symbol: 'QQQ', yfTicker: 'QQQ'     },
+  { symbol: 'IWM', yfTicker: 'IWM'     },
+  { symbol: 'DIA', yfTicker: 'DIA'     },
+  { symbol: 'VIX', yfTicker: '^VIX'    },
+  { symbol: 'GLD', yfTicker: 'GLD'     },
+  { symbol: 'BTC', yfTicker: 'BTC-USD' },
+];
+
+app.get('/api/indices', async (req, res) => {
+  try {
+    const results = await Promise.allSettled(INDEX_MAP.map(({ yfTicker }) => yf.quote(yfTicker)));
+    const rows = results.map((r, i) => {
+      const { symbol } = INDEX_MAP[i];
+      if (r.status !== 'fulfilled') return { symbol, price: null, change: null, changePercent: null };
+      const q = r.value;
+      return {
+        symbol,
+        price:         q.regularMarketPrice,
+        change:        q.regularMarketChange,
+        changePercent: q.regularMarketChangePercent,
+      };
+    });
+    res.json(rows);
+  } catch (err) {
+    console.error('[indices]:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/market-condition — SPY 50d/200d SMA trend analysis
+app.get('/api/market-condition', async (req, res) => {
+  try {
+    const endDate   = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 290); // buffer for weekends/holidays
+
+    const chart  = await yf.chart('SPY', { period1: startDate, period2: endDate, interval: '1d' });
+    const quotes = (chart.quotes || []).filter((q) => q.close != null);
+
+    if (quotes.length < 200) {
+      return res.json({ condition: 'INSUFFICIENT DATA', spyVs50sma: null, spyVs200sma: null, distributionDays: 0 });
+    }
+
+    function sma(arr, period) {
+      const slice = arr.slice(-period);
+      return slice.reduce((sum, q) => sum + q.close, 0) / period;
+    }
+
+    const price  = quotes[quotes.length - 1].close;
+    const sma50  = sma(quotes, 50);
+    const sma200 = sma(quotes, 200);
+
+    const fmt = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+
+    // Distribution days: down-close on higher volume in last 25 sessions
+    const recent = quotes.slice(-25);
+    let distributionDays = 0;
+    for (let i = 1; i < recent.length; i++) {
+      if (recent[i].close < recent[i - 1].close && recent[i].volume > recent[i - 1].volume) {
+        distributionDays++;
+      }
+    }
+
+    let condition;
+    if (price > sma50 && price > sma200 && sma50 > sma200) {
+      condition = 'CONFIRMED UPTREND';
+    } else if (price < sma50 && price > sma200) {
+      condition = 'UPTREND UNDER PRESSURE';
+    } else {
+      condition = 'MARKET IN CORRECTION';
+    }
+
+    res.json({
+      condition,
+      spyVs50sma:      fmt((price - sma50)  / sma50  * 100),
+      spyVs200sma:     fmt((price - sma200) / sma200 * 100),
+      distributionDays,
+    });
+  } catch (err) {
+    console.error('[market-condition]:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/news/:ticker — latest 5 news headlines
 app.get('/api/news/:ticker', async (req, res) => {
   try {

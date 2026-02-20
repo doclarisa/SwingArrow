@@ -61,6 +61,33 @@ button {
   font-family: inherit;
 }
 
+/* ── Consistent button style ── gold border on hover, gold bg when .sw-active */
+.sw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.sw-btn:hover {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+.sw-btn.sw-active {
+  background: var(--gold);
+  color: #0d0d0d;
+  border-color: var(--gold);
+}
+
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }

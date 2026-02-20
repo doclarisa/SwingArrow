@@ -479,7 +479,7 @@ function NotesCell({ text }) {
   )
 }
 
-function TradesTable({ trades, sortCol, sortDir, onSort, onDelete, deleteConfirm }) {
+function TradesTable({ trades, sortCol, sortDir, onSort, onDelete }) {
   const rowBorderColor = result =>
     result === 'Win' ? 'var(--green)' : result === 'Loss' ? 'var(--red)' : 'var(--gold)'
 
@@ -511,15 +511,10 @@ function TradesTable({ trades, sortCol, sortDir, onSort, onDelete, deleteConfirm
           {trades.map(trade => {
             const { result, rMultiple, pnl } = derived(trade)
             const borderColor = rowBorderColor(result)
-            const isPendingDelete = deleteConfirm === trade.id
             return (
               <tr
                 key={trade.id}
-                style={{
-                  borderLeft: `3px solid ${borderColor}`,
-                  background: isPendingDelete ? '#3a1a1a' : 'transparent',
-                  transition: 'background 0.15s',
-                }}
+                style={{ borderLeft: `3px solid ${borderColor}` }}
               >
                 <td style={td}>{trade.ticker}</td>
                 <td style={{ ...td, color: 'var(--muted)' }}>{trade.setupType}</td>
@@ -537,20 +532,11 @@ function TradesTable({ trades, sortCol, sortDir, onSort, onDelete, deleteConfirm
                 <td style={{ ...td, textAlign: 'center' }}>
                   <button
                     onClick={() => onDelete(trade.id)}
-                    style={{
-                      background: isPendingDelete ? 'var(--red)' : 'transparent',
-                      border: `1px solid ${isPendingDelete ? 'var(--red)' : 'var(--border)'}`,
-                      color: isPendingDelete ? '#fff' : 'var(--muted)',
-                      borderRadius: 4,
-                      padding: '2px 6px',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      fontFamily: "'JetBrains Mono', monospace",
-                      transition: 'all 0.15s',
-                    }}
-                    title={isPendingDelete ? 'Click again to confirm delete' : 'Delete trade'}
+                    className="sw-btn"
+                    style={{ padding: '2px 7px', fontSize: 13, color: 'var(--red)', borderColor: 'transparent' }}
+                    title="Delete trade"
                   >
-                    {isPendingDelete ? 'Sure?' : '✕'}
+                    🗑
                   </button>
                 </td>
               </tr>
@@ -596,10 +582,9 @@ export default function Journal() {
     }
   })
 
-  const [form,          setForm]          = useState(EMPTY_FORM)
-  const [sortCol,       setSortCol]       = useState('entryDate')
-  const [sortDir,       setSortDir]       = useState('desc')
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [form,    setForm]    = useState(EMPTY_FORM)
+  const [sortCol, setSortCol] = useState('entryDate')
+  const [sortDir, setSortDir] = useState('desc')
 
   // Persist on every change
   useEffect(() => {
@@ -640,13 +625,8 @@ export default function Journal() {
   }
 
   function handleDeleteTrade(id) {
-    if (deleteConfirm === id) {
+    if (window.confirm('Delete this trade? This cannot be undone.')) {
       setTrades(prev => prev.filter(t => t.id !== id))
-      setDeleteConfirm(null)
-    } else {
-      setDeleteConfirm(id)
-      // Auto-cancel after 3s
-      setTimeout(() => setDeleteConfirm(c => c === id ? null : c), 3000)
     }
   }
 
@@ -694,7 +674,6 @@ export default function Journal() {
           sortDir={sortDir}
           onSort={handleSort}
           onDelete={handleDeleteTrade}
-          deleteConfirm={deleteConfirm}
         />
       </div>
     </div>
