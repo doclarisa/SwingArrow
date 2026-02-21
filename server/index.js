@@ -6,7 +6,14 @@ const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: 'http://localhost:5173' }));
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://swingarrow.vercel.app',
+    /\.vercel\.app$/,
+  ],
+}));
 app.use(express.json());
 
 // GET /api/quote/:ticker — current price, % change, volume
