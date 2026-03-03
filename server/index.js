@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { default: YahooFinance } = require('yahoo-finance2');
+const { analyzePriceAction, detectCandlePatterns, classifyTrendContext } = require('./analyzePriceAction');
 
 const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 const app = express();
@@ -395,6 +396,53 @@ app.get('/api/news/:ticker', async (req, res) => {
     res.json(articles);
   } catch (err) {
     console.error(`[news] ${req.params.ticker}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/analyze/:ticker — price-action analysis, candle patterns, trend context
+app.get('/api/analyze/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+
+    const endDate   = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 100); // ~100 calendar days → ~70 trading days
+
+    const [chart, summary] = await Promise.all([
+      yf.chart(ticker, { period1: startDate, period2: endDate, interval: '1d' }),
+      yf.quoteSummary(ticker, { modules: ['summaryDetail'] }),
+    ]);
+
+    const ohlcvData = (chart.quotes || [])
+      .filter((q) => q.open != null && q.close != null)
+      .map((q) => ({
+        time:   Math.floor(new Date(q.date).getTime() / 1000),
+        open:   q.open,
+        high:   q.high,
+        low:    q.low,
+        close:  q.close,
+        volume: q.volume || 0,
+      }));
+
+    const sd = summary.summaryDetail || {};
+    const fiftyTwoWeekHigh = sd.fiftyTwoWeekHigh ?? null;
+
+    const volumeAnalysis   = analyzePriceAction(ohlcvData);
+    const candlePatterns   = detectCandlePatterns(ohlcvData);
+    const trendContext     = classifyTrendContext(ohlcvData, {
+      fiftyTwoWeekHigh,
+      ...volumeAnalysis,
+    });
+
+    res.json({
+      ticker,
+      volumeAnalysis,
+      candlePatterns,
+      trendContext,
+    });
+  } catch (err) {
+    console.error(`[analyze] ${req.params.ticker}:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
