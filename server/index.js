@@ -439,6 +439,94 @@ app.get('/api/analyze/:ticker', async (req, res) => {
   }
 });
 
+// GET /api/price-action/:ticker — composite verdict for the Trade Plan sidebar
+// Optional query param: ?sepaScore=6  (0–8; pass from the frontend SEPA checklist)
+//
+// Never returns a 5xx. If Yahoo Finance data cannot be fetched, or if the
+// analysis throws unexpectedly, the endpoint returns HTTP 200 with a neutral
+// verdict (tradePlanState = 'monitor') so the Trade Plan stays visible.
+app.get('/api/price-action/:ticker', async (req, res) => {
+  const { ticker } = req.params;
+
+  // ── Neutral fallback ───────────────────────────────────────────────────────
+  // Returned in lieu of a 5xx when data is unavailable.
+  // score=50 / tradePlanState='monitor' keeps the Trade Plan visible.
+  const NEUTRAL_VERDICT = {
+    ticker,
+    score:             50,
+    verdict:           'wait',
+    verdictLabel:      'Wait — Data Unavailable',
+    tradePlanState:    'monitor',
+    suppressionReason: null,
+    trendContext: {
+      state:              'caution',
+      humanReadableLabel: 'Insufficient Data',
+      color:              'orange',
+      vs20sma:            null,
+      vs50sma:            null,
+      distFromHigh:       null,
+    },
+    volumeAnalysis: {
+      distributionDays: 0,
+      accumulationDays: 0,
+      volumeDryUp:      false,
+      climaxVolume:     false,
+      pocketPivot:      false,
+      volumeTrend:      'neutral',
+    },
+    candlePatterns:  [],
+    scoreBreakdown:  { sepaPoints: 25, priceActionPoints: 25 },
+    dataAvailable:   false,
+  };
+
+  try {
+    // Validate optional sepaScore param — reject NaN silently (treat as absent)
+    const rawSepa   = req.query.sepaScore;
+    const sepaScore = rawSepa != null && rawSepa !== '' && !isNaN(Number(rawSepa))
+      ? Number(rawSepa)
+      : null;
+
+    // 90 calendar days ≈ 63 trading days — enough for SMA50 + buffer
+    const endDate   = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 90);
+
+    // Inner try isolates Yahoo Finance network failures from analysis errors
+    let chart, summary;
+    try {
+      [chart, summary] = await Promise.all([
+        yf.chart(ticker, { period1: startDate, period2: endDate, interval: '1d' }),
+        yf.quoteSummary(ticker, { modules: ['summaryDetail'] }),
+      ]);
+    } catch (fetchErr) {
+      console.error(`[price-action] ${ticker} fetch failed:`, fetchErr.message);
+      return res.json({ ...NEUTRAL_VERDICT, error: fetchErr.message });
+    }
+
+    const ohlcvData = (chart.quotes || [])
+      .filter((q) => q.open != null && q.close != null)
+      .map((q) => ({
+        time:   Math.floor(new Date(q.date).getTime() / 1000),
+        open:   q.open,
+        high:   q.high,
+        low:    q.low,
+        close:  q.close,
+        volume: q.volume || 0,
+      }));
+
+    const sd         = summary?.summaryDetail || {};
+    const sepaDetails = { fiftyTwoWeekHigh: sd.fiftyTwoWeekHigh ?? null };
+
+    const verdict = getPriceActionVerdict(ohlcvData, sepaScore, sepaDetails);
+
+    res.json({ ticker, ...verdict, dataAvailable: true });
+  } catch (err) {
+    // Catch-all for unexpected errors (malformed params, analysis bug, etc.)
+    console.error(`[price-action] ${ticker}:`, err.message);
+    res.json({ ...NEUTRAL_VERDICT, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`SwingArrow API server running on http://localhost:${PORT}`);
 });
