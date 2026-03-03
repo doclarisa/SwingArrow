@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { default: YahooFinance } = require('yahoo-finance2');
-const { analyzePriceAction, detectCandlePatterns, classifyTrendContext } = require('./analyzePriceAction');
+const { getPriceActionVerdict } = require('./analyzePriceAction');
 
 const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 const app = express();
@@ -400,10 +400,12 @@ app.get('/api/news/:ticker', async (req, res) => {
   }
 });
 
-// GET /api/analyze/:ticker — price-action analysis, candle patterns, trend context
+// GET /api/analyze/:ticker — composite price-action verdict
+// Optional query params: ?sepaScore=6  (0-8; pass from the frontend SEPA checklist)
 app.get('/api/analyze/:ticker', async (req, res) => {
   try {
     const { ticker } = req.params;
+    const sepaScore = req.query.sepaScore != null ? Number(req.query.sepaScore) : null;
 
     const endDate   = new Date();
     const startDate = new Date();
@@ -426,21 +428,11 @@ app.get('/api/analyze/:ticker', async (req, res) => {
       }));
 
     const sd = summary.summaryDetail || {};
-    const fiftyTwoWeekHigh = sd.fiftyTwoWeekHigh ?? null;
+    const sepaDetails = { fiftyTwoWeekHigh: sd.fiftyTwoWeekHigh ?? null };
 
-    const volumeAnalysis   = analyzePriceAction(ohlcvData);
-    const candlePatterns   = detectCandlePatterns(ohlcvData);
-    const trendContext     = classifyTrendContext(ohlcvData, {
-      fiftyTwoWeekHigh,
-      ...volumeAnalysis,
-    });
+    const verdict = getPriceActionVerdict(ohlcvData, sepaScore, sepaDetails);
 
-    res.json({
-      ticker,
-      volumeAnalysis,
-      candlePatterns,
-      trendContext,
-    });
+    res.json({ ticker, ...verdict });
   } catch (err) {
     console.error(`[analyze] ${req.params.ticker}:`, err.message);
     res.status(500).json({ error: err.message });

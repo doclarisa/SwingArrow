@@ -716,4 +716,242 @@ function classifyTrendContext(ohlcvData, sepaData = {}) {
   };
 }
 
-module.exports = { analyzePriceAction, detectCandlePatterns, classifyTrendContext };
+/**
+ * getPriceActionVerdict(ohlcvData, sepaScore, sepaDetails)
+ *
+ * Master function: runs the three analysis helpers, fuses their output with
+ * the SEPA fundamental score, and returns a single actionability verdict plus
+ * a trade-plan state that controls what the UI is allowed to show the user.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * COMPOSITE SCORING (0 – 100, clamped)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * A. SEPA Fundamentals Gate          0 – 50 pts
+ *    sepaScore (0–8 passing criteria) × 6.25
+ *    Missing (null) → 25 pts (neutral; no reward, no penalty)
+ *
+ * B. Price-Action / Volume Profile   0 – 50 pts (clamped, never negative)
+ *
+ *    Trend-context base score
+ *      breakout       +25
+ *      uptrend        +20
+ *      pullback       +12
+ *      caution        + 4
+ *      misclassified  + 0
+ *
+ *    Volume signals             (additive; each applied once)
+ *      volumeTrend bullish      + 8
+ *      volumeTrend neutral      + 4
+ *      volumeTrend bearish      + 0
+ *      volumeDryUp              + 5   (supply exhausted — constructive)
+ *      pocketPivot              + 7   (demand > highest prior supply day)
+ *      accumulationDays ≥ 3     + 4   (institutions accumulating)
+ *      climaxVolume             − 5   (potential exhaustion blow-off)
+ *      distributionDays ≥ 4    −10   (heavy institutional selling)
+ *      distributionDays = 3     − 5
+ *      distributionDays 1–2     − 2
+ *
+ *    Most-recent candle pattern (only the highest-recency pattern counts)
+ *      bullish + high confidence  + 5
+ *      bullish + medium           + 3
+ *      bearish + high confidence  − 5
+ *      bearish + medium           − 2
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VERDICT THRESHOLDS
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   75 – 100  actionable   High-probability setup; all gates green
+ *   55 –  74  watch        Developing setup; wait for a trigger candle
+ *   35 –  54  wait         Key criteria missing; revisit when conditions improve
+ *    0 –  34  avoid        Structural or fundamental failure; skip
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * TRADE-PLAN STATE  (SEPA + Price-Action combined gate)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   full        Score ≥ 75 AND sepaScore ≥ 5 AND trend in {breakout, uptrend}
+ *               → Show full trade plan (entry, target, stop)
+ *
+ *   caution     Score 55–74, OR score ≥ 75 with weakened fundamentals
+ *               → Show trade plan with risk warnings highlighted
+ *
+ *   monitor     Score 35–54
+ *               → Show summary only; suppress detailed trade plan
+ *
+ *   suppressed  Any hard-fail condition is true (see below)
+ *               → Hide trade plan entirely; show suppressionReason
+ *
+ * Hard-fail suppression triggers (evaluated in order; first match wins):
+ *   1. trendContext.state === 'misclassified'
+ *      → "Stage 1 / 4 structure — stock not in a swing-tradeable trend"
+ *   2. distributionDays ≥ 4 AND trendContext.state !== 'breakout'
+ *      → "Heavy distribution (n distribution days) — institutions are selling"
+ *   3. sepaScore is known AND sepaScore < 3
+ *      → "Setup score too low (n/8 SEPA criteria passing)"
+ *   4. trendContext.state === 'caution' AND distributionDays ≥ 3
+ *      → "Distribution + broken MA structure — wait for base reset"
+ *   5. composite score < 35
+ *      → "Combined score (n/100) below minimum actionable threshold"
+ *
+ * @param {Array<{time,open,high,low,close,volume}>} ohlcvData
+ *   OHLCV sorted ascending. Passed directly to the three sub-functions.
+ *
+ * @param {number|null} sepaScore
+ *   Count of passing SEPA criteria (0–8).  Pass null when unavailable.
+ *
+ * @param {{
+ *   stage?: number,            // 1–4; forwarded to classifyTrendContext
+ *   fiftyTwoWeekHigh?: number, // forwarded to classifyTrendContext
+ * }} sepaDetails
+ *   Optional extra fields forwarded to classifyTrendContext as sepaData.
+ *   Pass {} when unavailable.
+ *
+ * @returns {{
+ *   score:             number,
+ *   verdict:           'actionable'|'watch'|'wait'|'avoid',
+ *   verdictLabel:      string,
+ *   tradePlanState:    'full'|'caution'|'monitor'|'suppressed',
+ *   suppressionReason: string|null,
+ *   trendContext:      object,
+ *   volumeAnalysis:    object,
+ *   candlePatterns:    Array,
+ *   scoreBreakdown:    { sepaPoints: number, priceActionPoints: number }
+ * }}
+ */
+function getPriceActionVerdict(ohlcvData, sepaScore = null, sepaDetails = {}) {
+
+  // ── Run sub-functions ──────────────────────────────────────────────────────
+
+  const volumeAnalysis = analyzePriceAction(ohlcvData);
+  const candlePatterns = detectCandlePatterns(ohlcvData);
+  const trendContext   = classifyTrendContext(ohlcvData, {
+    ...sepaDetails,
+    ...volumeAnalysis, // spread volume signals so classifyTrendContext can use them
+  });
+
+  const {
+    distributionDays,
+    accumulationDays,
+    volumeDryUp,
+    climaxVolume,
+    pocketPivot,
+    volumeTrend,
+  } = volumeAnalysis;
+
+  const { state: trendState } = trendContext;
+
+  // ── A. SEPA points (0 – 50) ────────────────────────────────────────────────
+
+  const sepaPoints = sepaScore != null
+    ? Math.round((sepaScore / 8) * 50)
+    : 25; // neutral when no SEPA data is supplied
+
+  // ── B. Price-action points ─────────────────────────────────────────────────
+
+  // 1. Trend-context base
+  const TREND_BASE = {
+    breakout:      25,
+    uptrend:       20,
+    pullback:      12,
+    caution:        4,
+    misclassified:  0,
+  };
+  let paRaw = TREND_BASE[trendState] ?? 4;
+
+  // 2. Volume signals
+  if      (volumeTrend === 'bullish') paRaw += 8;
+  else if (volumeTrend === 'neutral') paRaw += 4;
+  // bearish → +0
+
+  if (volumeDryUp)          paRaw += 5;
+  if (pocketPivot)          paRaw += 7;
+  if (accumulationDays >= 3) paRaw += 4;
+
+  if (climaxVolume)                   paRaw -= 5;
+  if      (distributionDays >= 4)     paRaw -= 10;
+  else if (distributionDays === 3)    paRaw -= 5;
+  else if (distributionDays >= 1)     paRaw -= 2;
+
+  // 3. Most-recent candle pattern (highest-recency only — already sorted desc)
+  if (candlePatterns.length > 0) {
+    const top = candlePatterns[0];
+    if (top.bullishOrBearish === 'bullish') {
+      paRaw += top.confidence === 'high' ? 5 : 3;
+    } else {
+      paRaw -= top.confidence === 'high' ? 5 : 2;
+    }
+  }
+
+  // Clamp price-action sub-score to 0 – 50
+  const priceActionPoints = Math.max(0, Math.min(50, paRaw));
+
+  // ── Composite score (0 – 100) ──────────────────────────────────────────────
+
+  const score = Math.max(0, Math.min(100, sepaPoints + priceActionPoints));
+
+  // ── Verdict ────────────────────────────────────────────────────────────────
+
+  const VERDICT_TABLE = [
+    { min: 75, verdict: 'actionable', label: 'Actionable Setup'       },
+    { min: 55, verdict: 'watch',      label: 'Watch — Developing'      },
+    { min: 35, verdict: 'wait',       label: 'Wait — Not Ready'        },
+    { min:  0, verdict: 'avoid',      label: 'Avoid — Structural Risk' },
+  ];
+
+  const { verdict, label: verdictLabel } = VERDICT_TABLE.find((t) => score >= t.min);
+
+  // ── Trade-plan state + suppression logic ──────────────────────────────────
+
+  let tradePlanState;
+  let suppressionReason = null;
+
+  // Hard-fail checks (in priority order)
+  if (trendState === 'misclassified') {
+    tradePlanState    = 'suppressed';
+    suppressionReason = 'Stage 1 / 4 structure — stock not in a swing-tradeable trend';
+  } else if (distributionDays >= 4 && trendState !== 'breakout') {
+    tradePlanState    = 'suppressed';
+    suppressionReason = `Heavy distribution (${distributionDays} distribution days) — institutions are selling`;
+  } else if (sepaScore != null && sepaScore < 3) {
+    tradePlanState    = 'suppressed';
+    suppressionReason = `Setup score too low (${sepaScore}/8 SEPA criteria passing)`;
+  } else if (trendState === 'caution' && distributionDays >= 3) {
+    tradePlanState    = 'suppressed';
+    suppressionReason = 'Distribution + broken MA structure — wait for base reset';
+  } else if (score < 35) {
+    tradePlanState    = 'suppressed';
+    suppressionReason = `Combined score (${score}/100) below minimum actionable threshold`;
+  }
+
+  // Positive path
+  else if (score >= 75 && (sepaScore == null || sepaScore >= 5) &&
+           (trendState === 'breakout' || trendState === 'uptrend')) {
+    tradePlanState = 'full';
+  } else if (score >= 55) {
+    tradePlanState = 'caution';
+  } else {
+    // 35 – 54
+    tradePlanState = 'monitor';
+  }
+
+  // ── Return ─────────────────────────────────────────────────────────────────
+
+  return {
+    score,
+    verdict,
+    verdictLabel,
+    tradePlanState,
+    suppressionReason,
+    trendContext,
+    volumeAnalysis,
+    candlePatterns,
+    scoreBreakdown: { sepaPoints, priceActionPoints },
+  };
+}
+
+module.exports = {
+  analyzePriceAction,
+  detectCandlePatterns,
+  classifyTrendContext,
+  getPriceActionVerdict,
+};
