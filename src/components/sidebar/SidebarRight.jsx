@@ -1,4 +1,5 @@
 import SepaChecklist from '../analysis/SepaChecklist';
+import PriceActionPanel from '../analysis/PriceActionPanel';
 import TradePlan from '../analysis/TradePlan';
 import AlertsFeed from '../analysis/AlertsFeed';
 
@@ -20,6 +21,8 @@ export default function SidebarRight() {
     >
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         <SepaChecklist />
+        <Divider />
+        <PriceActionPanel />
         <Divider />
         <TradePlan />
         <Divider />
