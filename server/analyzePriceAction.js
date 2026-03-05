@@ -752,11 +752,13 @@ function classifyTrendContext(ohlcvData, sepaData = {}) {
  *      distributionDays = 3     − 5
  *      distributionDays 1–2     − 2
  *
- *    Most-recent candle pattern (only the highest-recency pattern counts)
- *      bullish + high confidence  + 5
- *      bullish + medium           + 3
- *      bearish + high confidence  − 5
- *      bearish + medium           − 2
+ *    Candle patterns — all detected patterns, recency-weighted, clamped [−20, +30]
+ *      Candles 1–5 (most recent): 2× weight   Candles 6–10: 1× weight
+ *      Bullish Engulfing (high confidence)  +15 per occurrence × weight
+ *      Other bullish (high confidence)      + 5 per occurrence × weight
+ *      Other bullish (medium)               + 3 per occurrence × weight
+ *      Bearish (high confidence)            − 5 per occurrence × weight
+ *      Bearish (medium)                     − 2 per occurrence × weight
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * VERDICT THRESHOLDS
@@ -872,14 +874,38 @@ function getPriceActionVerdict(ohlcvData, sepaScore = null, sepaDetails = {}) {
   else if (distributionDays === 3)    paRaw -= 5;
   else if (distributionDays >= 1)     paRaw -= 2;
 
-  // 3. Most-recent candle pattern (highest-recency only — already sorted desc)
+  // 3. Candle patterns — recency-weighted across all detected patterns
+  //
+  // Patterns completing within the last 5 candles (candles 1–5, most recent)
+  // carry 2× weight vs patterns from candles 6–10.
+  //
+  // Base point values per pattern:
+  //   Bullish Engulfing (high confidence)  → +15  (demand overwhelms prior supply)
+  //   Any other bullish (high confidence)  → + 5
+  //   Any other bullish (medium)           → + 3
+  //   Bearish (high confidence)            → − 5
+  //   Bearish (medium)                     → − 2
+  //
+  // Contribution is clamped to [−20, +30] before adding to paRaw so that
+  // a cluster of patterns in the same window cannot dominate the full score.
   if (candlePatterns.length > 0) {
-    const top = candlePatterns[0];
-    if (top.bullishOrBearish === 'bullish') {
-      paRaw += top.confidence === 'high' ? 5 : 3;
-    } else {
-      paRaw -= top.confidence === 'high' ? 5 : 2;
+    const recentCutoff = ohlcvData.length - 5; // patterns at index ≥ this → 2×
+    let patternRaw = 0;
+
+    for (const pat of candlePatterns) {
+      const weight = pat.index >= recentCutoff ? 2 : 1;
+      let pts;
+      if (pat.bullishOrBearish === 'bullish') {
+        pts = (pat.patternName === 'Bullish Engulfing' && pat.confidence === 'high')
+          ? 15
+          : pat.confidence === 'high' ? 5 : 3;
+      } else {
+        pts = pat.confidence === 'high' ? -5 : -2;
+      }
+      patternRaw += pts * weight;
     }
+
+    paRaw += Math.max(-20, Math.min(30, patternRaw));
   }
 
   // Clamp price-action sub-score to 0 – 50

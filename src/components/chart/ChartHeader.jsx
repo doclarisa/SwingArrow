@@ -5,6 +5,13 @@ import { API_BASE } from '../../lib/api';
 
 const TIMEFRAMES = ['1D', 'W', 'M', '3M', '1Y'];
 
+const TREND_HEX = {
+  green:  '#2ecc71',
+  yellow: '#c9a84c',
+  orange: '#e67e22',
+  red:    '#e74c3c',
+};
+
 function fmtPct(n) {
   if (n == null || isNaN(n)) return '—';
   const sign = n >= 0 ? '+' : '';
@@ -19,6 +26,19 @@ export default function ChartHeader({ timeframe, onTimeframeChange }) {
     queryFn: () => fetch(`${API_BASE}/api/quote/${activeTicker}`).then((r) => r.json()),
     staleTime: 30_000,
   });
+
+  // Read trend context from the same cache PriceActionPanel populates — no extra fetch.
+  const { data: paData } = useQuery({
+    queryKey: ['price-action', activeTicker],
+    queryFn:  () =>
+      fetch(`${API_BASE}/api/price-action/${activeTicker}`).then((r) => r.json()),
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  // Badge values — fall back to static "Stage 2" green while the cache is empty
+  const trendLabel = paData?.trendContext?.humanReadableLabel ?? 'Stage 2';
+  const trendColor = TREND_HEX[paData?.trendContext?.color] ?? '#2ecc71';
 
   const isPositive = (quote?.changePercent ?? 0) >= 0;
 
@@ -64,23 +84,23 @@ export default function ChartHeader({ timeframe, onTimeframeChange }) {
           </div>
         </div>
 
-        {/* Stage badge — hardcoded Stage 2 */}
+        {/* Trend context badge — live from price-action API, falls back to "Stage 2" */}
         <span
           style={{
-            display: 'inline-flex',
+            display:    'inline-flex',
             alignItems: 'center',
-            padding: '4px 10px',
+            padding:    '4px 10px',
             borderRadius: 4,
-            background: 'rgba(46, 204, 113, 0.12)',
-            border: '1px solid rgba(46, 204, 113, 0.28)',
-            color: '#2ecc71',
+            background: `${trendColor}1e`,
+            border:     `1px solid ${trendColor}47`,
+            color:      trendColor,
             fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 12,
+            fontSize:   12,
             fontWeight: 600,
             flexShrink: 0,
           }}
         >
-          Stage 2
+          {trendLabel}
         </span>
       </div>
 
